@@ -3,71 +3,128 @@ import requests
 import json
 import time
 from datetime import datetime, timedelta
-from collections import defaultdict
+from supabase import create_client
 
-st.set_page_config(
-    page_title="Polymarket Tracker",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="Polymarket Tracker", page_icon="📊", layout="wide")
 
 st.markdown("""
 <style>
-    .market-card {
-        background: #13131f;
-        border: 1px solid #22223a;
-        border-radius: 14px;
-        padding: 1.2rem 1.4rem;
-        margin-bottom: 0.8rem;
-    }
-    .spike-card {
-        background: #1a1010;
-        border: 1px solid #ff4444;
-        border-radius: 14px;
-        padding: 1rem 1.4rem;
-        margin-bottom: 0.6rem;
-    }
-    .question { font-size: 1rem; font-weight: 600; color: #e8e8f0; line-height: 1.4; }
-    .meta     { font-size: 0.75rem; color: #666688; margin: 2px 0 8px; }
-    .vol-big  { font-size: 1.4rem; font-weight: 700; color: #e8e8f0; }
-    .vol-sub  { font-size: 0.75rem; color: #666688; }
-    .yes-btn  { background:#1a3a1a; color:#34d399; border:1px solid #34d399;
-                border-radius:8px; padding:6px 18px; font-weight:700; font-size:0.9rem; }
-    .no-btn   { background:#3a1a1a; color:#f87171; border:1px solid #f87171;
-                border-radius:8px; padding:6px 18px; font-weight:700; font-size:0.9rem; }
-    .prob-yes { font-size:1.6rem; font-weight:800; color:#34d399; }
-    .prob-no  { font-size:1.6rem; font-weight:800; color:#f87171; }
-    .prob-mid { font-size:1.6rem; font-weight:800; color:#fbbf24; }
-    .spike-badge {
-        background:#ff2222; color:#fff; border-radius:6px;
-        padding:2px 10px; font-size:0.72rem; font-weight:700; margin-left:8px;
-    }
-    .shift-up   { color:#34d399; font-weight:700; }
-    .shift-down { color:#f87171; font-weight:700; }
-    .rank { font-size:0.72rem; color:#44446a; font-weight:700; margin-bottom:4px; }
-    .pill {
-        display:inline-block; background:#1e1e30; border-radius:20px;
-        padding:2px 10px; font-size:0.7rem; color:#7777aa; margin-right:4px;
-    }
-    .section-header {
-        font-size:0.8rem; font-weight:700; color:#555577;
-        letter-spacing:0.12em; text-transform:uppercase;
-        margin: 1.2rem 0 0.6rem;
-    }
-    div[data-testid="stMetricValue"] { font-size: 1.3rem !important; }
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+
+* { font-family: 'Rajdhani', sans-serif; }
+code, .mono { font-family: 'Share Tech Mono', monospace; }
+
+body { background: #070712; }
+
+.block-container { padding-top: 1.5rem; max-width: 1200px; }
+
+.hdr {
+    border-bottom: 1px solid #1a1a3a;
+    padding-bottom: 0.8rem;
+    margin-bottom: 1.2rem;
+}
+.hdr h1 {
+    font-size: 1.8rem; font-weight: 700; letter-spacing: 0.15em;
+    background: linear-gradient(90deg, #00f5c4, #7b61ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin: 0;
+}
+.hdr-sub { font-size: 0.75rem; color: #444466; letter-spacing: 0.1em; margin-top: 4px; }
+
+.metric-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    margin-bottom: 1.2rem;
+}
+.metric-box {
+    background: #0d0d1f; border: 1px solid #1a1a3a;
+    border-radius: 8px; padding: 0.7rem 1rem;
+}
+.metric-box .lbl { font-size: 0.68rem; color: #444466; letter-spacing: 0.12em; text-transform: uppercase; }
+.metric-box .val { font-size: 1.4rem; font-weight: 700; color: #e0e0ff; font-family: 'Share Tech Mono', monospace; }
+
+.spike-panel {
+    background: #120a0a; border: 1px solid #ff3333;
+    border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1rem;
+}
+.spike-title { font-size: 0.7rem; color: #ff3333; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.6rem; }
+.spike-item { border-bottom: 1px solid #1a0a0a; padding: 0.5rem 0; }
+.spike-item:last-child { border-bottom: none; }
+
+.mcard {
+    background: #0a0a1a; border: 1px solid #1a1a3a;
+    border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 0.6rem;
+    transition: border-color 0.2s;
+}
+.mcard:hover { border-color: #333366; }
+.mcard.has-spike { border-color: #ff3333 !important; }
+.mcard.has-outlier { border-color: #ffaa00 !important; }
+
+.mrank { font-size: 0.65rem; color: #333355; letter-spacing: 0.1em; font-family: 'Share Tech Mono'; }
+.mq { font-size: 0.95rem; font-weight: 600; color: #c0c0e0; line-height: 1.4; margin: 4px 0; }
+.mcat { font-size: 0.68rem; color: #333355; letter-spacing: 0.08em; margin-bottom: 8px; }
+
+.btn-yes {
+    background: #0a1f14; color: #00f5a0; border: 1px solid #00f5a0;
+    border-radius: 6px; padding: 5px 16px; font-size: 0.82rem;
+    font-weight: 700; letter-spacing: 0.05em; margin-right: 8px;
+    font-family: 'Rajdhani', sans-serif;
+}
+.btn-no {
+    background: #1f0a0a; color: #ff5555; border: 1px solid #ff5555;
+    border-radius: 6px; padding: 5px 16px; font-size: 0.82rem;
+    font-weight: 700; letter-spacing: 0.05em;
+    font-family: 'Rajdhani', sans-serif;
+}
+
+.prob-yes { font-size: 1.8rem; font-weight: 700; color: #00f5a0; font-family: 'Share Tech Mono'; text-align: center; }
+.prob-mid { font-size: 1.8rem; font-weight: 700; color: #ffaa00; font-family: 'Share Tech Mono'; text-align: center; }
+.prob-no  { font-size: 1.8rem; font-weight: 700; color: #ff5555; font-family: 'Share Tech Mono'; text-align: center; }
+
+.vol-main { font-size: 1.3rem; font-weight: 700; color: #e0e0ff; font-family: 'Share Tech Mono'; }
+.vol-sub  { font-size: 0.68rem; color: #444466; letter-spacing: 0.08em; }
+.vol-total { font-size: 0.9rem; color: #888899; font-family: 'Share Tech Mono'; }
+
+.badge-up   { background:#0a2a1a; color:#00f5a0; border:1px solid #00f5a0; border-radius:5px; padding:2px 8px; font-size:0.72rem; font-weight:700; margin-right:4px; font-family:'Share Tech Mono'; }
+.badge-down { background:#2a0a0a; color:#ff5555; border:1px solid #ff5555; border-radius:5px; padding:2px 8px; font-size:0.72rem; font-weight:700; margin-right:4px; font-family:'Share Tech Mono'; }
+.badge-flat { background:#0d0d1f; color:#444466; border:1px solid #222244; border-radius:5px; padding:2px 8px; font-size:0.72rem; font-weight:700; margin-right:4px; font-family:'Share Tech Mono'; }
+.badge-outlier { background:#2a1a00; color:#ffaa00; border:1px solid #ffaa00; border-radius:5px; padding:2px 8px; font-size:0.72rem; font-weight:700; margin-right:4px; font-family:'Share Tech Mono'; }
+.badge-spike { background:#2a0000; color:#ff3333; border:1px solid #ff3333; border-radius:5px; padding:2px 8px; font-size:0.72rem; font-weight:700; margin-right:4px; font-family:'Share Tech Mono'; }
+
+.sec-hdr { font-size:0.68rem; color:#333355; letter-spacing:0.15em; text-transform:uppercase; margin:1rem 0 0.5rem; border-top:1px solid #0d0d1f; padding-top:0.8rem; }
+.status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
 </style>
 """, unsafe_allow_html=True)
 
-GAMMA_API  = "https://gamma-api.polymarket.com"
-REFRESH_8H = 8 * 3600
+# ── Constants ────────────────────────────────────────────────
+GAMMA_API    = "https://gamma-api.polymarket.com"
+CLOB_API     = "https://clob.polymarket.com"
+SUPABASE_URL = "https://llwpjeokrxfuingxiksk.supabase.co"
+SUPABASE_KEY = "sb_publishable_ovPph4WdVncPNq6AHztH_A_Ng8SlHlv"
+SPIKE_VOL    = 250_000
+WINDOW_HRS   = 3
+REFRESH_8H   = 8 * 3600
+CLEANUP_DAYS = 7
 
-# ── Session state init ───────────────────────────────────────
-if "top10"         not in st.session_state: st.session_state.top10        = None
-if "top10_ts"      not in st.session_state: st.session_state.top10_ts     = 0
-if "vol_history"   not in st.session_state: st.session_state.vol_history  = defaultdict(list)
-if "prob_history"  not in st.session_state: st.session_state.prob_history = defaultdict(list)
-if "spikes"        not in st.session_state: st.session_state.spikes       = []
-if "last_live"     not in st.session_state: st.session_state.last_live    = 0
+# ── Supabase client ──────────────────────────────────────────
+@st.cache_resource
+def get_supabase():
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def init_tables():
+    """Create tables if they don't exist via Supabase REST."""
+    sb = get_supabase()
+    try:
+        sb.table("volume_snapshots").select("id").limit(1).execute()
+    except:
+        pass
+    try:
+        sb.table("prob_snapshots").select("id").limit(1).execute()
+    except:
+        pass
+    try:
+        sb.table("spike_log").select("id").limit(1).execute()
+    except:
+        pass
 
 # ── Helpers ──────────────────────────────────────────────────
 def fmt_vol(n):
@@ -89,6 +146,15 @@ def yes_no(pairs):
     no  = next((p for o, p in pairs if o.lower() == "no"),  None)
     return yes, no
 
+def badge_html(label, shift):
+    if shift is None:
+        return f'<span class="badge-flat">{label}: —</span>'
+    direction = "▲" if shift > 0 else "▼"
+    cls = "badge-up" if shift > 0 else ("badge-down" if shift < 0 else "badge-flat")
+    return f'<span class="{cls}">{direction}{abs(shift*100):.1f}pp {label}</span>'
+
+# ── API calls ────────────────────────────────────────────────
+@st.cache_data(ttl=REFRESH_8H)
 def fetch_top10():
     r = requests.get(f"{GAMMA_API}/markets", params={
         "active": "true", "closed": "false",
@@ -97,132 +163,292 @@ def fetch_top10():
     r.raise_for_status()
     return r.json()
 
-def detect_spikes(market_id, current_vol, current_prob, question, spike_vol, window_hrs):
-    now   = datetime.utcnow()
-    hist  = st.session_state.vol_history[market_id]
-    phist = st.session_state.prob_history[market_id]
+def fetch_clob_history(token_id, interval="1d"):
+    try:
+        r = requests.get(f"{CLOB_API}/prices-history", params={
+            "market": token_id, "interval": interval, "fidelity": 60
+        }, timeout=8)
+        if r.ok:
+            data = r.json().get("history", [])
+            return data
+    except:
+        pass
+    return []
 
-    hist.append({"t": now, "vol": current_vol})
-    phist.append({"t": now, "prob": current_prob})
+def get_prob_shift(token_id, interval):
+    """Get probability shift over a given interval from CLOB."""
+    history = fetch_clob_history(token_id, interval)
+    if len(history) < 2:
+        return None
+    return history[-1]["p"] - history[0]["p"]
 
-    cutoff = now - timedelta(hours=24)
-    st.session_state.vol_history[market_id]  = [h for h in hist  if h["t"] > cutoff]
-    st.session_state.prob_history[market_id] = [h for h in phist if h["t"] > cutoff]
+# ── Supabase operations ──────────────────────────────────────
+def save_volume_snapshot(market_id, volume, question):
+    try:
+        sb = get_supabase()
+        sb.table("volume_snapshots").insert({
+            "market_id": market_id,
+            "volume": volume,
+            "question": question[:200],
+            "ts": datetime.utcnow().isoformat()
+        }).execute()
+    except:
+        pass
 
-    window_cutoff = now - timedelta(hours=window_hrs)
-    window  = [h for h in st.session_state.vol_history[market_id]  if h["t"] > window_cutoff]
-    pwindow = [h for h in st.session_state.prob_history[market_id] if h["t"] > window_cutoff]
+def save_prob_snapshot(market_id, prob, question):
+    try:
+        sb = get_supabase()
+        sb.table("prob_snapshots").insert({
+            "market_id": market_id,
+            "prob": prob,
+            "question": question[:200],
+            "ts": datetime.utcnow().isoformat()
+        }).execute()
+    except:
+        pass
 
-    if len(window) < 2:
+def get_volume_window(market_id, hours=3):
+    """Get volume snapshots from the last N hours."""
+    try:
+        sb = get_supabase()
+        since = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+        res = sb.table("volume_snapshots")\
+            .select("volume,ts")\
+            .eq("market_id", market_id)\
+            .gte("ts", since)\
+            .order("ts")\
+            .execute()
+        return res.data or []
+    except:
+        return []
+
+def get_prob_window(market_id, hours=24):
+    """Get prob snapshots from the last N hours to calculate drift rate."""
+    try:
+        sb = get_supabase()
+        since = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+        res = sb.table("prob_snapshots")\
+            .select("prob,ts")\
+            .eq("market_id", market_id)\
+            .gte("ts", since)\
+            .order("ts")\
+            .execute()
+        return res.data or []
+    except:
+        return []
+
+def log_spike(market_id, question, vol_gain, prob_shift, current_prob):
+    try:
+        sb = get_supabase()
+        # Check no duplicate in last hour
+        since = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+        existing = sb.table("spike_log")\
+            .select("id")\
+            .eq("market_id", market_id)\
+            .gte("ts", since)\
+            .execute()
+        if not existing.data:
+            sb.table("spike_log").insert({
+                "market_id": market_id,
+                "question": question[:200],
+                "vol_gain": vol_gain,
+                "prob_shift": prob_shift,
+                "current_prob": current_prob,
+                "ts": datetime.utcnow().isoformat()
+            }).execute()
+    except:
+        pass
+
+def get_recent_spikes(limit=5):
+    try:
+        sb = get_supabase()
+        since = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+        res = sb.table("spike_log")\
+            .select("*")\
+            .gte("ts", since)\
+            .order("ts", desc=True)\
+            .limit(limit)\
+            .execute()
+        return res.data or []
+    except:
+        return []
+
+def cleanup_old_data():
+    """Delete snapshots older than 7 days to stay within 500MB."""
+    try:
+        sb = get_supabase()
+        cutoff = (datetime.utcnow() - timedelta(days=CLEANUP_DAYS)).isoformat()
+        sb.table("volume_snapshots").delete().lt("ts", cutoff).execute()
+        sb.table("prob_snapshots").delete().lt("ts", cutoff).execute()
+    except:
+        pass
+
+def detect_spike(market_id, current_vol, current_prob, question):
+    """
+    Spike = $250K+ volume in 3h window AND prob moved 3x its normal drift rate.
+    """
+    snapshots = get_volume_window(market_id, hours=WINDOW_HRS)
+    if len(snapshots) < 2:
         return None
 
-    vol_gain   = window[-1]["vol"] - window[0]["vol"]
-    prob_shift = (pwindow[-1]["prob"] - pwindow[0]["prob"]) if len(pwindow) >= 2 else None
+    vol_gain = current_vol - snapshots[0]["volume"]
+    if vol_gain < SPIKE_VOL:
+        return None
 
-    if vol_gain >= spike_vol:
-        existing = [s for s in st.session_state.spikes
-                    if s["id"] == market_id and (now - s["detected_at"]).seconds < 3600]
-        if not existing:
-            spike = {
-                "id": market_id, "question": question,
-                "vol_gain": vol_gain, "prob_shift": prob_shift,
-                "current_prob": current_prob, "detected_at": now,
-            }
-            st.session_state.spikes.insert(0, spike)
-            st.session_state.spikes = st.session_state.spikes[:20]
-            return spike
-    return None
+    # Check prob shift vs normal drift
+    prob_snaps = get_prob_window(market_id, hours=24)
+    if len(prob_snaps) >= 2:
+        # Normal drift = average absolute change per hour over last 24h
+        total_hours = 24
+        total_shift = abs(prob_snaps[-1]["prob"] - prob_snaps[0]["prob"])
+        normal_drift = total_shift / total_hours if total_hours > 0 else 0.005
+
+        # Prob shift during spike window
+        spike_prob_snaps = [p for p in prob_snaps
+                           if p["ts"] >= snapshots[0]["ts"]]
+        if len(spike_prob_snaps) >= 2:
+            spike_prob_shift = abs(spike_prob_snaps[-1]["prob"] - spike_prob_snaps[0]["prob"])
+            spike_hours = WINDOW_HRS
+            spike_drift = spike_prob_shift / spike_hours
+
+            # Only flag if prob moved 3x its normal rate during spike
+            if normal_drift > 0 and spike_drift < (3 * normal_drift):
+                return None
+            prob_shift_val = spike_prob_snaps[-1]["prob"] - spike_prob_snaps[0]["prob"]
+        else:
+            prob_shift_val = None
+    else:
+        # Not enough history — flag on volume alone for now
+        prob_shift_val = None
+
+    log_spike(market_id, question, vol_gain, prob_shift_val, current_prob)
+    return {"vol_gain": vol_gain, "prob_shift": prob_shift_val}
+
+def detect_outlier(shifts):
+    """
+    Outlier = one timeframe moving significantly against the others.
+    shifts = {"1h": float|None, "6h": float|None, "1d": float|None}
+    """
+    vals = {k: v for k, v in shifts.items() if v is not None}
+    if len(vals) < 2:
+        return False
+    values = list(vals.values())
+    avg = sum(values) / len(values)
+    for v in values:
+        if avg != 0 and abs(v - avg) > abs(avg) * 2:
+            return True
+        if avg == 0 and abs(v) > 0.05:
+            return True
+    return False
+
+# ── Session state ────────────────────────────────────────────
+if "last_poll" not in st.session_state: st.session_state.last_poll = 0
+if "db_ready"  not in st.session_state: st.session_state.db_ready  = False
 
 # ── Sidebar ──────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## ⚙️ Settings")
-    spike_threshold = st.number_input(
-        "Spike threshold ($)", min_value=50_000,
-        max_value=5_000_000, value=250_000, step=50_000, format="%d"
-    )
-    window_hrs = st.slider("Spike window (hours)", 1, 12, 3)
+    st.markdown("### ⚙ CONFIG")
+    spike_threshold = st.number_input("Spike threshold ($)", min_value=50_000,
+        max_value=2_000_000, value=250_000, step=50_000, format="%d")
+    window_hrs = st.slider("Spike window (hrs)", 1, 12, 3)
     auto_refresh = st.toggle("Auto-refresh (60s)", value=False)
     st.markdown("---")
-    st.caption("Top 10 list refreshes 3× per day (every 8h).")
-    st.caption("Prices & volume refresh every 60s when auto-refresh is on.")
-    st.caption("Data: [Polymarket Gamma API](https://gamma-api.polymarket.com)")
-    if st.button("🔄 Force refresh everything"):
-        st.session_state.top10_ts = 0
+    st.caption("Top 10 refreshes 3× daily.")
+    st.caption("Prices poll every 60s.")
+    st.caption("History stored in Supabase.")
+    if st.button("🔄 Force refresh"):
+        st.cache_data.clear()
+        st.rerun()
 
-# ── Refresh top-10 every 8h ──────────────────────────────────
-now_ts = time.time()
-if (now_ts - st.session_state.top10_ts) > REFRESH_8H or st.session_state.top10 is None:
+SPIKE_VOL  = spike_threshold
+WINDOW_HRS = window_hrs
+
+# ── Init DB (first run) ──────────────────────────────────────
+if not st.session_state.db_ready:
     try:
-        with st.spinner("Refreshing top 10 markets…"):
-            st.session_state.top10    = fetch_top10()
-            st.session_state.top10_ts = now_ts
-    except Exception as e:
-        st.error(f"API error: {e}")
-        st.stop()
+        init_tables()
+        st.session_state.db_ready = True
+    except:
+        pass
 
-markets = st.session_state.top10
+# ── Fetch top 10 ─────────────────────────────────────────────
+try:
+    markets = fetch_top10()
+except Exception as e:
+    st.error(f"Cannot reach Polymarket API: {e}")
+    st.stop()
 
-# ── Live spike detection (every 60s) ────────────────────────
-if (now_ts - st.session_state.last_live) > 60:
+# ── Poll + store snapshots every 60s ────────────────────────
+now_ts = time.time()
+if (now_ts - st.session_state.last_poll) > 60:
     for m in markets:
-        mid   = m.get("id") or m.get("slug")
+        mid   = m.get("conditionId") or m.get("id") or m.get("slug", "")
         vol   = float(m.get("volume", 0))
         pairs = parse_outcomes(m)
         yes, _ = yes_no(pairs)
-        if yes is None and pairs:
-            yes = pairs[0][1]
-        if mid and yes is not None:
-            detect_spikes(mid, vol, yes, m.get("question",""), spike_threshold, window_hrs)
-    st.session_state.last_live = now_ts
+        if yes is None and pairs: yes = pairs[0][1]
+        q = m.get("question", "")
+        if mid:
+            save_volume_snapshot(mid, vol, q)
+            if yes is not None:
+                save_prob_snapshot(mid, yes, q)
+    cleanup_old_data()
+    st.session_state.last_poll = now_ts
 
 # ── Header ───────────────────────────────────────────────────
-st.markdown("# 📊 Polymarket Tracker")
-next_refresh = datetime.utcfromtimestamp(st.session_state.top10_ts + REFRESH_8H)
-st.caption(
-    f"Top 10 updated: {datetime.utcfromtimestamp(st.session_state.top10_ts).strftime('%d %b %H:%M')} UTC  ·  "
-    f"Next: {next_refresh.strftime('%H:%M')} UTC  ·  "
-    f"Now: {datetime.utcnow().strftime('%H:%M:%S')} UTC"
-)
+st.markdown("""
+<div class="hdr">
+  <h1>◈ POLYMARKET TRACKER</h1>
+  <div class="hdr-sub">LIVE PREDICTION MARKET INTELLIGENCE · TOP 10 BY 24H VOLUME</div>
+</div>
+""", unsafe_allow_html=True)
 
 # ── Summary metrics ──────────────────────────────────────────
-total_24h = sum(float(m.get("volume24hr", 0)) for m in markets)
-total_vol = sum(float(m.get("volume", 0)) for m in markets)
+total_24h  = sum(float(m.get("volume24hr", 0)) for m in markets)
+total_vol  = sum(float(m.get("volume", 0)) for m in markets)
+spikes     = get_recent_spikes(limit=10)
+now_str    = datetime.utcnow().strftime("%H:%M:%S UTC")
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Markets tracked", len(markets))
-c2.metric("Total 24h volume", fmt_vol(total_24h))
-c3.metric("Total all-time vol", fmt_vol(total_vol))
-c4.metric("🚨 Spikes detected", len(st.session_state.spikes))
+with c1:
+    st.markdown(f'<div class="metric-box"><div class="lbl">markets tracked</div><div class="val">10</div></div>', unsafe_allow_html=True)
+with c2:
+    st.markdown(f'<div class="metric-box"><div class="lbl">total 24h volume</div><div class="val">{fmt_vol(total_24h)}</div></div>', unsafe_allow_html=True)
+with c3:
+    st.markdown(f'<div class="metric-box"><div class="lbl">spikes (24h)</div><div class="val">{len(spikes)}</div></div>', unsafe_allow_html=True)
+with c4:
+    st.markdown(f'<div class="metric-box"><div class="lbl">last updated</div><div class="val" style="font-size:1rem;">{now_str}</div></div>', unsafe_allow_html=True)
 
-# ── Spike alerts panel ───────────────────────────────────────
-if st.session_state.spikes:
-    st.markdown('<div class="section-header">🚨 Volume Spike Alerts</div>', unsafe_allow_html=True)
-    st.caption(f">${fmt_vol(spike_threshold)} traded within {window_hrs}h · showing last {min(5, len(st.session_state.spikes))}")
-
-    for sp in st.session_state.spikes[:5]:
-        age     = datetime.utcnow() - sp["detected_at"]
+# ── Spike alerts ─────────────────────────────────────────────
+if spikes:
+    spike_items = ""
+    for sp in spikes[:5]:
+        age = datetime.utcnow() - datetime.fromisoformat(sp["ts"])
         age_str = f"{int(age.seconds/60)}m ago" if age.seconds < 3600 else f"{int(age.seconds/3600)}h ago"
+        ps = sp.get("prob_shift")
+        ps_str = ""
+        if ps is not None:
+            d = "▲" if ps > 0 else "▼"
+            c = "#00f5a0" if ps > 0 else "#ff5555"
+            ps_str = f'<span style="color:{c};font-weight:700;"> {d}{abs(ps*100):.1f}pp</span>'
+        spike_items += f"""
+        <div class="spike-item">
+          <span style="color:#ff3333;font-weight:700;font-family:'Share Tech Mono'">⚡ +{fmt_vol(sp['vol_gain'])}</span>
+          {ps_str}
+          <span style="color:#666677;font-size:0.75rem;"> · {age_str}</span><br>
+          <span style="color:#aaaacc;font-size:0.82rem;">{sp['question'][:80]}{'…' if len(sp['question'])>80 else ''}</span>
+          <span style="color:#555566;font-size:0.75rem;"> · YES: {sp['current_prob']*100:.0f}%</span>
+        </div>"""
 
-        shift_html = ""
-        if sp["prob_shift"] is not None and abs(sp["prob_shift"]) >= 0.005:
-            direction = "▲" if sp["prob_shift"] > 0 else "▼"
-            cls = "shift-up" if sp["prob_shift"] > 0 else "shift-down"
-            shift_html = f'<span class="{cls}">{direction} {abs(sp["prob_shift"]*100):.1f}pp</span>'
-
-        st.markdown(f"""
-        <div class="spike-card">
-          <span class="spike-badge">SPIKE</span>
-          <span style="font-size:0.75rem;color:#888;margin-left:8px;">{age_str}</span><br>
-          <span class="question">{sp['question'][:80]}{'…' if len(sp['question'])>80 else ''}</span><br>
-          <span style="color:#ff6666;font-weight:700;">+{fmt_vol(sp['vol_gain'])}</span>
-          <span style="color:#666;font-size:0.8rem;"> in {window_hrs}h</span>
-          {"&nbsp;&nbsp;" + shift_html if shift_html else ""}
-          &nbsp;&nbsp;<span style="color:#aaa;font-size:0.8rem;">YES: {sp['current_prob']*100:.0f}%</span>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="spike-panel">
+      <div class="spike-title">⚡ volume spike alerts — last 24h</div>
+      {spike_items}
+    </div>
+    """, unsafe_allow_html=True)
 
 # ── Market cards ─────────────────────────────────────────────
-st.markdown('<div class="section-header">Top 10 Most Active Markets</div>', unsafe_allow_html=True)
+st.markdown('<div class="sec-hdr">▸ active markets</div>', unsafe_allow_html=True)
 
 for i, m in enumerate(markets, 1):
     question = m.get("question", "Unknown")
@@ -233,6 +459,7 @@ for i, m in enumerate(markets, 1):
     url      = m.get("url") or (f"https://polymarket.com/event/{slug}" if slug else None)
     pairs    = parse_outcomes(m)
     yes, no  = yes_no(pairs)
+    mid      = m.get("conditionId") or m.get("id") or slug
 
     is_binary = (
         len(pairs) == 2 and
@@ -240,44 +467,77 @@ for i, m in enumerate(markets, 1):
         any(o.lower() == "no"  for o, _ in pairs)
     )
 
-    mid       = m.get("id") or m.get("slug")
-    has_spike = any(
-        s["id"] == mid for s in st.session_state.spikes
-        if (datetime.utcnow() - s["detected_at"]).seconds < window_hrs * 3600
-    )
+    # Get CLOB-based probability shifts
+    token_id = None
+    if m.get("clobTokenIds"):
+        try:
+            ids = json.loads(m["clobTokenIds"])
+            token_id = ids[0] if ids else None
+        except:
+            pass
 
-    col_info, col_prob, col_vol = st.columns([3, 1.5, 1])
+    shifts = {"1h": None, "6h": None, "7d": None}
+    if token_id:
+        shifts["1h"] = get_prob_shift(token_id, "1h")
+        shifts["6h"] = get_prob_shift(token_id, "6h")
+        shifts["7d"] = get_prob_shift(token_id, "1w")
+
+    is_outlier = detect_outlier(shifts)
+
+    # Spike check from Supabase
+    has_spike = any(s["market_id"] == mid for s in spikes
+                    if (datetime.utcnow() - datetime.fromisoformat(s["ts"])).seconds < WINDOW_HRS * 3600)
+
+    card_class = "mcard"
+    if has_spike: card_class += " has-spike"
+    elif is_outlier: card_class += " has-outlier"
+
+    col_info, col_prob, col_vol = st.columns([3, 1.2, 1])
 
     with col_info:
-        spike_tag = '<span class="spike-badge">SPIKE</span>' if has_spike else ''
-        q_text = f'<a href="{url}" target="_blank" style="color:#e8e8f0;text-decoration:none;">{question}</a>' if url else question
+        spike_tag   = '<span class="badge-spike">⚡SPIKE</span>' if has_spike else ''
+        outlier_tag = '<span class="badge-outlier">◈ OUTLIER</span>' if is_outlier else ''
+        q_text = f'<a href="{url}" target="_blank" style="color:#c0c0e0;text-decoration:none;">{question}</a>' if url else question
+
+        badge_row = (
+            badge_html("1h", shifts["1h"]) +
+            badge_html("6h", shifts["6h"]) +
+            badge_html("7d", shifts["7d"])
+        )
+
         st.markdown(f"""
-        <div class="rank">#{i}</div>
-        <div class="question">{q_text} {spike_tag}</div>
-        <div class="meta">{cat}</div>
+        <div class="{card_class}">
+          <div class="mrank">#{i:02d}</div>
+          <div class="mq">{q_text} {spike_tag}{outlier_tag}</div>
+          <div class="mcat">{cat.upper()}</div>
+          <div style="margin-top:6px;">{badge_row}</div>
         """, unsafe_allow_html=True)
 
         if is_binary and yes is not None:
             yes_c = int(yes * 100)
             no_c  = 100 - yes_c
             st.markdown(f"""
-            <span class="yes-btn">Buy Yes {yes_c}¢</span>&nbsp;&nbsp;
-            <span class="no-btn">Buy No {no_c}¢</span>
+          <div style="margin-top:10px;">
+            <span class="btn-yes">BUY YES {yes_c}¢</span>
+            <span class="btn-no">BUY NO {no_c}¢</span>
+          </div>
             """, unsafe_allow_html=True)
         elif pairs:
             pills = "".join(
-                f'<span class="pill">{o} {int(p*100)}¢</span>'
+                f'<span style="background:#0d0d1f;border:1px solid #1a1a3a;border-radius:5px;padding:2px 8px;font-size:0.72rem;color:#888899;margin-right:4px;">{o} {int(p*100)}¢</span>'
                 for o, p in pairs[:4]
             )
-            st.markdown(pills, unsafe_allow_html=True)
+            st.markdown(f'<div style="margin-top:8px;">{pills}</div>', unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col_prob:
         if is_binary and yes is not None:
             pct = yes * 100
             cls = "prob-yes" if pct >= 65 else ("prob-mid" if pct >= 35 else "prob-no")
-            st.markdown(f'<div class="{cls}" style="text-align:center;margin-bottom:4px;">{pct:.0f}%</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="{cls}">{pct:.0f}%</div>', unsafe_allow_html=True)
             st.progress(yes)
-            st.caption("YES probability")
+            st.caption("YES prob")
         elif pairs:
             for label, prob in pairs[:3]:
                 st.caption(f"{label}: {prob*100:.0f}%")
@@ -285,40 +545,16 @@ for i, m in enumerate(markets, 1):
 
     with col_vol:
         st.markdown(
-            f'<div class="vol-big">{fmt_vol(v24)}</div>'
-            f'<div class="vol-sub">24h volume</div>'
-            f'<div style="margin-top:8px;">'
-            f'<div class="vol-sub">All-time</div>'
-            f'<div style="font-size:1rem;font-weight:600;color:#aaa;">{fmt_vol(vtot)}</div>'
-            f'</div>',
+            f'<div class="vol-main">{fmt_vol(v24)}</div>'
+            f'<div class="vol-sub">24H VOLUME</div>'
+            f'<div style="margin-top:8px;"><div class="vol-sub">ALL-TIME</div>'
+            f'<div class="vol-total">{fmt_vol(vtot)}</div></div>',
             unsafe_allow_html=True
         )
 
-    st.divider()
+    st.markdown("<hr style='border-color:#0d0d1f;margin:4px 0;'>", unsafe_allow_html=True)
 
-# ── Probability shift log ────────────────────────────────────
-shifts = []
-for m in markets:
-    mid   = m.get("id") or m.get("slug")
-    phist = st.session_state.prob_history.get(mid, [])
-    if len(phist) >= 2:
-        delta = phist[-1]["prob"] - phist[0]["prob"]
-        if abs(delta) >= 0.01:
-            shifts.append((delta, m.get("question",""), phist[0]["prob"], phist[-1]["prob"]))
-
-if shifts:
-    st.markdown('<div class="section-header">📈 Probability Shifts (this session)</div>', unsafe_allow_html=True)
-    for delta, q, start, end in sorted(shifts, key=lambda x: abs(x[0]), reverse=True):
-        direction = "▲" if delta > 0 else "▼"
-        cls = "shift-up" if delta > 0 else "shift-down"
-        st.markdown(
-            f'<span class="{cls}">{direction} {abs(delta*100):.1f}pp</span>'
-            f'&nbsp;&nbsp;<span style="color:#aaa;font-size:0.85rem;">{q[:65]}…</span>'
-            f'&nbsp;&nbsp;<span style="color:#666;font-size:0.8rem;">{start*100:.0f}% → {end*100:.0f}%</span>',
-            unsafe_allow_html=True
-        )
-
-# ── Auto-refresh ─────────────────────────────────────────────
+# ── Auto refresh ─────────────────────────────────────────────
 if auto_refresh:
     time.sleep(60)
     st.rerun()
