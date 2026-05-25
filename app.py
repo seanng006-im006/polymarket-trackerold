@@ -201,13 +201,18 @@ def compute_kyle(mid, cur_vol, cur_prob, question, win_label, hours):
     if vg>=threshold and abs(ps)>0.005:
         log_spike(mid,question,vg,ps,cur_prob,win_label,lam)
         if win_label=="3h" and vg>=250_000:
-            d="📈 YES" if ps>0 else "📉 NO"
-            send_telegram(
-                f"⚡ <b>POLYMARKET SPIKE</b>\n\n<b>{question[:80]}</b>\n\n"
-                f"💰 +{fmt_vol(vg)} in 3h\n"
-                f"📊 {'+' if ps>0 else ''}{ps*100:.1f}pp {d}\n"
-                f"YES: <b>{cur_prob*100:.1f}%</b>"
-            )
+            tg_key = f"{mid}_3h"
+            last_sent = st.session_state.tg_sent.get(tg_key)
+            now_dt = datetime.utcnow()
+            if last_sent is None or (now_dt - last_sent).seconds > 10800:
+                d="📈 YES" if ps>0 else "📉 NO"
+                send_telegram(
+                    f"⚡ <b>POLYMARKET SPIKE</b>\n\n<b>{question[:80]}</b>\n\n"
+                    f"💰 +{fmt_vol(vg)} in 3h\n"
+                    f"📊 {'+' if ps>0 else ''}{ps*100:.1f}pp {d}\n"
+                    f"YES: <b>{cur_prob*100:.1f}%</b>"
+                )
+                st.session_state.tg_sent[tg_key] = now_dt
     return vg,ps,lam if above else None
 
 @st.cache_data(ttl=REFRESH_8H)
@@ -331,6 +336,7 @@ def card_html(m, rank, spikes, is_hero=False):
     return html
 
 if "last_poll" not in st.session_state: st.session_state.last_poll=0
+if "tg_sent" not in st.session_state: st.session_state.tg_sent={}
 
 with st.sidebar:
     st.markdown("### ⚙ CONFIG")
