@@ -304,13 +304,13 @@ def card_html(m, rank, spikes, is_hero=False):
     vb+='</div>'
 
     # prob badges
-    pb='<div class="badges"><span class="blbl">PP Δ</span>'
+    pb='<div class="badges"><span class="blbl">YES</span>'
     for wl,val in [("1h",ps.get("1h")),("3h",ps.get("3h")),
                    ("6h",ps.get("6h")),("24h",ps.get("24h")),("7d",ps_7d)]:
         if val is None:      pb+=f'<span class="badge bn">— {wl}</span>'
-        elif val>0.001:      pb+=f'<span class="badge bu">▲{abs(val*100):.2f}pp {wl}</span>'
-        elif val<-0.001:     pb+=f'<span class="badge bd">▼{abs(val*100):.2f}pp {wl}</span>'
-        else:                pb+=f'<span class="badge bn">0pp {wl}</span>'
+        elif val>0.001:      pb+=f'<span class="badge bu">+{abs(val*100):.2f}% {wl}</span>'
+        elif val<-0.001:     pb+=f'<span class="badge bd">-{abs(val*100):.2f}% {wl}</span>'
+        else:                pb+=f'<span class="badge bn">0% {wl}</span>'
     pb+='</div>'
 
     qcls="cq-hero" if is_hero else "cq"
@@ -393,7 +393,7 @@ if spikes:
         rows+=(f'<div class="spike-row">'
                f'<span style="color:#ff3333;font-weight:700;font-family:\'Share Tech Mono\'">⚡ +{fmt_vol(sp["vol_gain"])}</span>'
                f'<span style="color:#666;font-size:0.7rem"> · {sp.get("win","?")}w · {age_str}</span>'
-               f'<span style="color:{col};font-weight:700"> {"▲" if ps>0 else "▼"}{abs(ps*100):.1f}pp</span><br>'
+               f'<span style="color:{col};font-weight:700"> {"▲" if ps>0 else "▼"}{abs(ps*100):.1f}%</span><br>'
                f'<span style="color:#aaaacc;font-size:0.78rem">{sp["question"][:70]}{"…" if len(sp["question"])>70 else ""}</span>'
                f'</div>')
     st.markdown(f'<div class="spike-panel"><div class="spike-title">⚡ spike log — last 24h</div>{rows}</div>',
