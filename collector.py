@@ -139,7 +139,7 @@ def cleanup():
 # ── Process each market ───────────────────────────────────────
 def process_market(m):
     mid      = m.get("conditionId") or m.get("id") or m.get("slug", "")
-    vol      = float(m.get("volume", 0))
+    vol      = float(m.get("volume24hr", 0))  # use 24h volume as it updates more frequently
     liq      = float(m.get("liquidity") or m.get("liquidityClob") or 0)
     end_date = m.get("endDate") or m.get("endDateIso", "")
     question = m.get("question", "")
